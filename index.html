@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Share Image Steganography</title>
+<style>
+:root { --bg:#0b0f14; --panel:#111821; --muted:#9bb0c3; --text:#e6edf3; --accent:#6aa9ff; --accent2:#9bffda; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial; color:var(--text); background:linear-gradient(180deg,#0b0f14,#0c1219 40%,#0b0f14); }
+header { position:sticky; top:0; z-index:5; background:rgba(11,15,20,.85); backdrop-filter: blur(10px); border-bottom:1px solid #1b2635; }
+.wrap { max-width: 800px; margin:0 auto; padding:16px; display:flex; align-items:center; justify-content:space-between; }
+.header-left { display:flex; flex-direction:column; }
+h1 { margin:0; font-size: 22px; letter-spacing:.3px; font-weight:700; }
+p.sub { color:var(--muted); margin:.25rem 0 0; font-size: 13px; }
+.tabs { display:flex; gap:8px; align-items:center; }
+.tab { cursor:pointer; border:1px solid #203044; background:#101722; color:var(--text); padding:10px 14px; border-radius:12px; font-weight:600; }
+.tab[aria-selected="true"] { background:linear-gradient(135deg,#162233,#0f1725); border-color:#2b4260; box-shadow: inset 0 0 0 1px #2c4c7a, 0 0 0 2px rgba(106,169,255,.1); }
+.panel { margin-top:16px; background:var(--panel); border:1px solid #1a2738; border-radius:16px; padding:16px; }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+.field { display:flex; flex-direction:column; gap:6px; padding:12px; background:#0f1621; border:1px solid #1a2738; border-radius:12px; }
+label { font-size:12px; letter-spacing:.5px; color:#a7bbcf; text-transform: uppercase; }
+input[type="file"], input[type="text"], select { width:100%; padding:10px; border-radius:10px; border:1px solid #223449; background:#0c1320; color:var(--text); }
+.actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+button { cursor:pointer; border:1px solid #264466; background:linear-gradient(180deg,#1a2a40,#13223a); color:var(--text); padding:10px 14px; border-radius:12px; font-weight:700; letter-spacing:.2px; }
+button.primary { background:linear-gradient(180deg,#2a4a78,#1b2f55); border-color:#2b5b90; box-shadow: 0 6px 18px rgba(57,120,207,.25); }
+button:disabled { opacity:.6; cursor:not-allowed; }
+.hint { color:var(--muted); font-size:12px; }
+.out { margin-top:16px; display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+.out.single { grid-template-columns: 1fr; }
+canvas { width:100%; height:auto; background:#0a0f17; border:1px dashed #25364a; border-radius:12px; }
+.notice { margin-top:10px; font-size:12px; color:#9ab3cb; }
+.footer { text-align:center; color:#7f99b6; font-size:12px; margin:24px 0 40px; }
+a.download { text-decoration:none; }
+.modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:20; }
+.modal { width:min(92vw,520px); background:#101826; border:1px solid #24364d; border-radius:16px; padding:18px; }
+.modal h3 { margin:0 0 8px; }
+.dim-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.dim-btn { width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid #2a3e58; background:#0f1726; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="header-left">
+<h1>Multi-Share Image Steganography</h1>
+<p class="sub">Embed a secret image within two image shares. Embedded data is password encrypted.</p>
+</div>
+<div class="tabs" role="tablist">
+<button class="tab" role="tab" id="tab-encode" aria-selected="true">Encode</button>
+<button class="tab" role="tab" id="tab-decode" aria-selected="false">Decode</button>
+</div>
+</div>
+</header>
+
+<main class="wrap">
+<section id="panel-encode" class="panel" role="tabpanel" aria-labelledby="tab-encode">
+<div class="grid">
+<div class="field">
+<label>Cover Image A</label>
+<input type="file" id="coverA" accept="image/*"/>
+</div>
+<div class="field">
+<label>Password</label>
+<input type="text" id="passwordEnc"/>
+</div>
+<div class="field">
+<label>Cover Image B</label>
+<input type="file" id="coverB" accept="image/*"/>
+</div>
+<div class="field">
+<label>Bit Depth</label>
+<select id="bitDepth">
+<option value="2">2 bits</option>
+<option value="4">4 bits</option>
+<option value="6" selected>6 bits</option>
+<option value="8">8 bits</option>
+</select>
+</div>
+<div class="field">
+<label>Secret Image</label>
+<input type="file" id="secret" accept="image/*"/>
+</div>
+</div>
+<div class="actions">
+<button class="primary" id="btn-encode">Encrypt & Create Shares</button>
+<a id="dlShareA" class="download" download="share-a.png" style="display:none"><button>Download Share A</button></a>
+<a id="dlShareB" class="download" download="share-b.png" style="display:none"><button>Download Share B</button></a>
+<span id="enc-status" class="notice"></span>
+</div>
+<div class="out">
+<canvas id="canvas-shareA"></canvas>
+<canvas id="canvas-shareB"></canvas>
+</div>
+</section>
+
+<section id="panel-decode" class="panel" role="tabpanel" aria-labelledby="tab-decode" hidden>
+<div class="grid">
+<div class="field">
+<label>Share Image A</label>
+<input type="file" id="decShareA" accept="image/*"/>
+</div>
+<div class="field">
+<label>Password</label>
+<input type="text" id="passwordDec"/>
+</div>
+<div class="field">
+<label>Share Image B</label>
+<input type="file" id="decShareB" accept="image/*"/>
+</div>
+<div class="field">
+<label>Bit Depth</label>
+<select id="bitDepthDec">
+<option value="2">2 bits</option>
+<option value="4">4 bits</option>
+<option value="6" selected>6 bits</option>
+<option value="8">8 bits</option>
+</select>
+</div>
+</div>
+<div class="actions">
+<button class="primary" id="btn-decode">Decrypt & Reconstruct</button>
+<a id="dlRecon" class="download" download="reconstructed.png" style="display:none"><button>Download Reconstructed</button></a>
+<span id="dec-status" class="notice"></span>
+</div>
+<div class="out single">
+<canvas id="canvas-recon"></canvas>
+</div>
+</section>
+</main>
+
+<!-- Dimension modal -->
+<div id="dim-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="dim-title">
+<div class="modal">
+<h3 id="dim-title">Choose Target Dimensions</h3>
+<p class="hint">Your uploaded images have different sizes. Pick a target size; all images will be resized (no smoothing) to this.</p>
+<div id="dim-options" class="dim-list"></div>
+</div>
+</div>
+
+<script>
+// --- Utilities ---
+const q=s=>document.querySelector(s);
+function loadImage(file){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=rej;img.src=URL.createObjectURL(file);});}
+function canvasFromImage(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.drawImage(img,0,0,w,h);return c;}
+function getImageData(c){return c.getContext('2d').getImageData(0,0,c.width,c.height);}
+function putImageDataToCanvas(d,c){c.width=d.width;c.height=d.height;c.getContext('2d').putImageData(d,0,0);}
+function toPNGDownload(c,a){a.href=c.toDataURL('image/png');a.style.display='';}
+async function sha256Bytes(str){const enc=new TextEncoder();const h=await crypto.subtle.digest('SHA-256',enc.encode(str));return new Uint8Array(h);}
+function bytesToSeed(u8){let seed=0;for(let i=0;i<u8.length;i++)seed=(seed*31+u8[i])>>>0;return seed;}
+function mulberry32(seed){let t=seed>>>0;return function(){t+=0x6D2B79F5;let r=Math.imul(t^(t>>>15),1|t);r^=r+Math.imul(r^(r>>>7),61|r);return ((r^(r>>>14))>>>0)/4294967296;};}
+function makePermutation(n,rng){const a=Array.from({length:n},(_,i)=>i);for(let i=n-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function invertPermutation(p){const inv=new Array(p.length);for(let i=0;i<p.length;i++)inv[p[i]]=i;return inv;}
+
+// --- Dimension Modal ---
+const dimModal=q('#dim-modal'); const dimOptions=q('#dim-options');
+function showDimModal(options){dimOptions.innerHTML='';options.forEach((opt,idx)=>{const btn=document.createElement('button');btn.className='dim-btn';btn.textContent=`${idx+1}. ${opt.label}`;btn.addEventListener('click',()=>{dimModal.style.display='none';opt.onChoose();});dimOptions.appendChild(btn);});dimModal.style.display='flex';}
+
+// --- Encode / Decode ---
+const canvasShareA=q('#canvas-shareA'), canvasShareB=q('#canvas-shareB'), canvasRecon=q('#canvas-recon');
+const encStatus=q('#enc-status'), decStatus=q('#dec-status');
+const dlShareA=q('#dlShareA'), dlShareB=q('#dlShareB'), dlRecon=q('#dlRecon');
+
+q('#bitDepth').onchange=e=>q('#note8').style.display=(e.target.value==='8')?'block':'none';
+q('#bitDepthDec').onchange=e=>q('#note8Dec').style.display=(e.target.value==='8')?'block':'none';
+
+q('#btn-encode').addEventListener('click', encode);
+q('#btn-decode').addEventListener('click', decode);
+
+async function encode(){
+const fA=q('#coverA').files[0], fB=q('#coverB').files[0], fS=q('#secret').files[0], pwd=q('#passwordEnc').value;
+const bitDepth=parseInt(q('#bitDepth').value,10);
+if(!fA||!fB||!fS){encStatus.textContent='Upload all images';return;}
+if(!pwd){encStatus.textContent='Enter password';return;}
+const [imgA,imgB,imgS]=await Promise.all([loadImage(fA),loadImage(fB),loadImage(fS)]);
+const sizes=[{w:imgA.naturalWidth,h:imgA.naturalHeight,label:`Cover A (${imgA.naturalWidth}×${imgA.naturalHeight})`},{w:imgB.naturalWidth,h:imgB.naturalHeight,label:`Cover B (${imgB.naturalWidth}×${imgB.naturalHeight})`},{w:imgS.naturalWidth,h:imgS.naturalHeight,label:`Secret (${imgS.naturalWidth}×${imgS.naturalHeight})`}];
+const allSame=sizes.every(s=>s.w===sizes[0].w&&s.h===sizes[0].h);
+let targetW=sizes[0].w,targetH=sizes[0].h;
+
+const doEncode=async()=>{
+const W=targetW,H=targetH,pixels=W*H;
+const cA=canvasFromImage(imgA,W,H),cB=canvasFromImage(imgB,W,H),cS=canvasFromImage(imgS,W,H);
+const dA=getImageData(cA),dB=getImageData(cB),dS=getImageData(cS);
+const outBytes=new Uint8Array(pixels*3);
+let idx=0;
+for(let p=0;p<pixels;p++){
+const base=p*4;
+for(let c=0;c<3;c++) outBytes[idx++]=dS.data[base+c]>>(8-bitDepth);
+}
+const seed=bytesToSeed(await sha256Bytes(pwd+`|${W}x${H}|depth${bitDepth}`));
+const rng=mulberry32(seed);
+const perm=makePermutation(outBytes.length,rng);
+const scrambled=new Uint8Array(outBytes.length);
+for(let i=0;i<outBytes.length;i++) scrambled[perm[i]]=outBytes[i];
+
+idx=0; const halfBits=bitDepth/2;
+const out1=getImageData(cA), out2=getImageData(cB);
+for(let p=0;p<pixels;p++){
+const base=p*4;
+for(let c=0;c<3;c++){
+const val=scrambled[idx++];
+const top=val>>halfBits;
+const bottom=val&((1<<halfBits)-1);
+out1.data[base+c]=(dA.data[base+c]&(~((1<<halfBits)-1)))|top;
+out2.data[base+c]=(dB.data[base+c]&(~((1<<halfBits)-1)))|bottom;
+}
+out1.data[base+3]=out2.data[base+3]=255;
+}
+putImageDataToCanvas(out1,canvasShareA);putImageDataToCanvas(out2,canvasShareB);
+toPNGDownload(canvasShareA,dlShareA);toPNGDownload(canvasShareB,dlShareB);
+encStatus.textContent=`Done. Shares generated ${W}×${H}`;
+}
+
+if(!allSame){
+const options=sizes.map(s=>({w:s.w,h:s.h,label:s.label,onChoose:()=>{targetW=s.w;targetH=s.h;doEncode();}}));
+showDimModal(options);
+}else{await doEncode();}
+}
+
+async function decode(){
+const fA=q('#decShareA').files[0], fB=q('#decShareB').files[0], pwd=q('#passwordDec').value;
+const bitDepth=parseInt(q('#bitDepthDec').value,10);
+if(!fA||!fB){decStatus.textContent='Select both shares';return;}
+if(!pwd){decStatus.textContent='Enter password';return;}
+const [imgA,imgB]=await Promise.all([loadImage(fA),loadImage(fB)]);
+if(imgA.naturalWidth!==imgB.naturalWidth||imgA.naturalHeight!==imgB.naturalHeight){decStatus.textContent='Shares must match';return;}
+const W=imgA.naturalWidth,H=imgA.naturalHeight,pixels=W*H;
+const cA=canvasFromImage(imgA,W,H),cB=canvasFromImage(imgB,W,H);
+const dA=getImageData(cA),dB=getImageData(cB);
+const halfBits=bitDepth/2;
+const scrambled=new Uint8Array(pixels*3);
+let idx=0;
+for(let p=0;p<pixels;p++){
+const base=p*4;
+for(let c=0;c<3;c++){
+const low=dB.data[base+c]&((1<<halfBits)-1);
+const high=dA.data[base+c]&((1<<halfBits)-1);
+scrambled[idx++]=(high<<halfBits)|low;
+}
+}
+const seed=bytesToSeed(await sha256Bytes(pwd+`|${W}x${H}|depth${bitDepth}`));
+const rng=mulberry32(seed);
+const perm=makePermutation(scrambled.length,rng);
+const inv=invertPermutation(perm);
+const orig=new Uint8ClampedArray(scrambled.length);
+for(let i=0;i<scrambled.length;i++) orig[inv[i]]=scrambled[i];
+
+const out=new ImageData(W,H);
+idx=0;
+for(let p=0;p<pixels;p++){
+const base=p*4;
+for(let c=0;c<3;c++) out.data[base+c]=orig[idx++]<<(8-bitDepth);
+out.data[base+3]=255;
+}
+putImageDataToCanvas(out,canvasRecon);
+toPNGDownload(canvasRecon,dlRecon);
+decStatus.textContent=`Done. Reconstructed ${W}×${H}`;
+}
+
+// --- Tabs ---
+const tabEncode=q('#tab-encode'), tabDecode=q('#tab-decode'), panelEncode=q('#panel-encode'), panelDecode=q('#panel-decode');
+function selectTab(which){const enc=which==='encode';tabEncode.setAttribute('aria-selected',enc);tabDecode.setAttribute('aria-selected',!enc);panelEncode.hidden=!enc;panelDecode.hidden=enc;}
+tabEncode.addEventListener('click',()=>selectTab('encode'));
+tabDecode.addEventListener('click',()=>selectTab('decode'));
+</script>
+</body>
+</html>
